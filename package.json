@@ -1,0 +1,33 @@
+{
+  "name": "nile-cisco-mab",
+  "version": "1.0.0",
+  "description": "A web application that converts Cisco MAC address binding data to Nile segment authorization format",
+  "scripts": {
+    "install": "cd frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "dev": "cd frontend && npm run dev",
+    "deploy": "./deploy.sh",
+    "deploy:cf": "./deploy-cloudformation.sh",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/nile-cisco-mab.git"
+  },
+  "keywords": [
+    "cisco",
+    "nile",
+    "mac-address-binding",
+    "network",
+    "migration"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yourusername/nile-cisco-mab/issues"
+  },
+  "homepage": "https://github.com/yourusername/nile-cisco-mab#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

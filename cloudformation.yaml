@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for Cisco MAB to Nile Migration Tool'
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket for hosting the static website
+    Default: cisco-mab-to-nile-migration-tool
+  
+  LambdaFunctionName:
+    Type: String
+    Description: Name of the Lambda function
+    Default: cisco-mab-to-nile
+  
+  ApiName:
+    Type: String
+    Description: Name of the API Gateway
+    Default: cisco-mab-to-nile-api
+
+Resources:
+  # S3 Bucket for static website hosting
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: 404.html
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+            AllowedOrigins:
+              - '*'
+            MaxAge: 3000
+  
+  # Bucket policy to allow public access
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref WebsiteBucket, '/*']]
+  
+  # IAM Role for Lambda function
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+  
+  # Lambda function
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaFunctionName
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.9
+      Timeout: 30
+      MemorySize: 128
+      Code:
+        S3Bucket: !Ref BucketName
+        S3Key: function.zip
+  
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Ref ApiName
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowHeaders:
+          - '*'
+        AllowMethods:
+          - '*'
+        AllowOrigins:
+          - '*'
+        ExposeHeaders:
+          - '*'
+        MaxAge: 3600
+  
+  # API Gateway Integration with Lambda
+  ApiGatewayIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations
+      PayloadFormatVersion: '2.0'
+  
+  # API Gateway Route for POST /process
+  ApiGatewayRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'POST /process'
+      Target: !Join ['/', ['integrations', !Ref ApiGatewayIntegration]]
+  
+  # API Gateway Route for OPTIONS /process (CORS preflight)
+  ApiGatewayOptionsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'OPTIONS /process'
+      Target: !Join ['/', ['integrations', !Ref ApiGatewayIntegration]]
+  
+  # API Gateway Stage
+  ApiGatewayStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ApiGateway
+      StageName: '$default'
+      AutoDeploy: true
+  
+  # Lambda Permission for API Gateway
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*
+
+Outputs:
+  WebsiteURL:
+    Description: URL for the S3 website
+    Value: !GetAtt WebsiteBucket.WebsiteURL
+  
+  ApiEndpoint:
+    Description: URL for the API Gateway endpoint
+    Value: !Sub ${ApiGateway.ApiEndpoint}/process
+  
+  BucketName:
+    Description: Name of the S3 bucket
+    Value: !Ref WebsiteBucket
+  
+  LambdaFunctionName:
+    Description: Name of the Lambda function
+    Value: !Ref LambdaFunction
+  
+  ApiGatewayId:
+    Description: ID of the API Gateway
+    Value: !Ref ApiGateway
