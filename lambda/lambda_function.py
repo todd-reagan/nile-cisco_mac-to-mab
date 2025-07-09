@@ -67,46 +67,76 @@ def format_mac_address(mac):
     # Return original if we can't parse it
     return mac
 
-def generate_csv(clients, vlan_to_segment):
+def generate_csv(clients, vlan_to_segment, static_ip_support=False):
     """
     Generate CSV content for Nile import
     """
     output = io.StringIO()
     writer = csv.writer(output)
     
-    # Write headers
-    writer.writerow([
-        'MAC Address (Required)',
-        'Segment (Required for allow state)',
-        'Lock to Port (Optional)',
-        'Site (Optional)',
-        'Building (Optional)',
-        'Floor (Optional)',
-        'Allow or Deny (Required)',
-        'Description (Optional)',
-        'Static IP (Optional)',
-        'IP Address (Optional)',
-        'Passive IP (Optional)'
-    ])
+    if static_ip_support:
+        # Full headers with IP columns
+        headers = [
+            'MAC Address (Required)',
+            'Segment (Required for allow state)',
+            'Lock to Port (Optional)',
+            'Site (Optional)',
+            'Building (Optional)',
+            'Floor (Optional)',
+            'Allow or Deny (Required)',
+            'Description (Optional)',
+            'Static IP (Optional)',
+            'IP Address (Optional)',
+            'Passive IP (Optional)'
+        ]
+    else:
+        # Base headers without Description and IP columns to match data rows
+        headers = [
+            'MAC Address (Required)',
+            'Segment (Required for allow state)',
+            'Lock to Port (Optional)',
+            'Site (Optional)',
+            'Building (Optional)',
+            'Floor (Optional)',
+            'Allow or Deny (Required)'
+        ]
+    
+    writer.writerow(headers)
     
     # Write client data
     for client in clients:
         vlan = client['vlan']
         segment = vlan_to_segment.get(str(vlan), '')
         
-        writer.writerow([
-            format_mac_address(client['mac']),
-            segment,
-            '',  # Lock to Port
-            '',  # Site
-            '',  # Building
-            '',  # Floor
-            'Allow',
-            '',  # Description
-            'No',  # Static IP
-            '',    # IP Address
-            'No'   # Passive IP
-        ])
+        if static_ip_support:
+            # Full row with IP columns
+            row = [
+                format_mac_address(client['mac']),
+                segment,
+                '',  # Lock to Port
+                '',  # Site
+                '',  # Building
+                '',  # Floor
+                'Allow',
+                '',  # Description
+                'No',  # Static IP
+                '',    # IP Address
+                'No'   # Passive IP
+            ]
+        else:
+            # Base row without IP columns - remove trailing empty Description to avoid trailing comma
+            row = [
+                format_mac_address(client['mac']),
+                segment,
+                '',  # Lock to Port
+                '',  # Site
+                '',  # Building
+                '',  # Floor
+                'Allow'
+                # Description field omitted to prevent trailing comma
+            ]
+        
+        writer.writerow(row)
     
     return output.getvalue()
 
@@ -170,6 +200,9 @@ def lambda_handler(event, context):
         # Get VLAN to segment mappings from request or use detected mappings
         vlan_mappings = body.get('vlanMappings', {})
         
+        # Get static IP support flag
+        static_ip_support = body.get('staticIpSupport', False)
+        
         # If no mappings were provided but we detected some, use those
         if not vlan_mappings and detected_mappings:
             vlan_mappings = detected_mappings
@@ -188,7 +221,7 @@ def lambda_handler(event, context):
             }
         
         # Generate CSV
-        csv_content = generate_csv(clients, vlan_mappings)
+        csv_content = generate_csv(clients, vlan_mappings, static_ip_support)
         
         # Return the CSV content
         return {

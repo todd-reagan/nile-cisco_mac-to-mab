@@ -11,19 +11,21 @@ A web application that converts Cisco MAC address binding data to Nile segment a
 
 - Drag-and-drop interface for uploading MAC address binding files
 - Automatic VLAN detection and mapping to Nile segments
+- Optional Static IP Support checkbox to control IP-related columns in output
 - CSV generation for import into Nile
 - Responsive design
+- Static deployment ready for Amazon S3 hosting
 
 
 ### Available Scripts
 
-The project includes several npm scripts to make development and deployment easier:
+The project includes several npm scripts and shell scripts to make development and deployment easier:
 
 - `npm install` - Install dependencies for the frontend
 - `npm run build` - Build the frontend application
-- `npm run dev` - Start the development server
 - `npm run deploy` - Deploy the application using the deploy.sh script
 - `npm run deploy:cf` - Deploy the application using CloudFormation
+- `./update.sh` - Update an already deployed application (incremental updates)
 
 ## Deployment to AWS
 
@@ -213,13 +215,73 @@ If you prefer to deploy manually, follow these steps:
 
 3. Update the frontend API endpoint in `.env.production` with the API Gateway URL.
 
+## Updating an Existing Deployment
+
+If you have already deployed the application and want to update it with code changes, use the update script instead of redeploying everything:
+
+### Using the Update Script
+
+1. Make the script executable (if not already done):
+   ```
+   chmod +x update.sh
+   ```
+
+2. Run the update script with your existing S3 bucket name:
+   ```
+   ./update.sh --bucket your-existing-bucket-name
+   ```
+
+   Or you can specify additional options:
+   ```
+   ./update.sh --bucket your-bucket-name --region us-west-2 --function cisco-mab-to-nile
+   ```
+
+3. The script will:
+   - Verify that your existing resources (S3 bucket, Lambda function, API Gateway) exist
+   - Update the Lambda function with the latest code
+   - Rebuild the frontend with the correct API endpoint
+   - Upload the updated frontend to S3
+   - Provide you with the updated URLs
+
+### Update Script Options
+
+- `-b, --bucket BUCKET_NAME`: Specify the S3 bucket name (required)
+- `-r, --region REGION`: Specify the AWS region (default: us-west-2)
+- `-f, --function FUNCTION`: Specify the Lambda function name (default: cisco-mab-to-nile)
+- `-a, --api API_NAME`: Specify the API Gateway name (default: cisco-mab-to-nile-api)
+- `-h, --help`: Show help message
+
+### When to Use the Update Script
+
+Use the update script when you have made changes to:
+- Lambda function code (`lambda/lambda_function.py`)
+- Frontend code (any files in `frontend/`)
+- Configuration or styling
+
+The update script is faster than a full deployment because it doesn't recreate AWS resources, it only updates the code.
+
 ## Usage
 
 1. Open the deployed website in a web browser.
 2. Drag and drop a MAC address binding file or click to select a file.
 3. Enter segment names for each VLAN detected in the file.
-4. Click "Process File" to generate the CSV.
-5. Download the CSV file for import into Nile.
+4. **Optional**: Check the "Static IP Support" checkbox if you need the IP-related columns in your CSV output:
+   - When **unchecked** (default): CSV contains 8 columns (excludes Static IP, IP Address, and Passive IP columns)
+   - When **checked**: CSV contains all 11 columns (includes the 3 IP-related columns)
+5. Click "Process File" to generate the CSV.
+6. Download the CSV file for import into Nile.
+
+### Static IP Support Feature
+
+The application includes a "Static IP Support" checkbox that controls whether IP-related columns are included in the generated CSV:
+
+- **Default behavior (unchecked)**: The CSV will contain only the essential 8 columns, which is recommended for most use cases
+- **When enabled (checked)**: The CSV will include all 11 columns, adding:
+  - Static IP (Optional)
+  - IP Address (Optional) 
+  - Passive IP (Optional)
+
+This feature allows you to generate cleaner CSV files when IP configuration is not needed, while still providing the option to include these columns when required.
 
 ## Input File Format
 
@@ -242,6 +304,16 @@ Each line contains:
 
 The tool generates a CSV file with the following columns:
 
+**Base columns (when Static IP Support is disabled):**
+1. MAC Address (Required)
+2. Segment (Required for allow state)
+3. Lock to Port (Optional)
+4. Site (Optional)
+5. Building (Optional)
+6. Floor (Optional)
+7. Allow or Deny (Required)
+
+**Full columns (when Static IP Support is enabled):**
 1. MAC Address (Required)
 2. Segment (Required for allow state)
 3. Lock to Port (Optional)
@@ -253,6 +325,8 @@ The tool generates a CSV file with the following columns:
 9. Static IP (Optional)
 10. IP Address (Optional)
 11. Passive IP (Optional)
+
+**Note:** When Static IP Support is disabled, the Description column and IP-related columns are omitted to create a cleaner CSV without trailing commas.
 
 ## License
 

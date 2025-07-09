@@ -30,6 +30,7 @@ export default function Home() {
   const [csvData, setCsvData] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'upload' | 'mapping' | 'results'>('upload');
+  const [staticIpSupport, setStaticIpSupport] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -132,13 +133,9 @@ export default function Home() {
       // Convert text content to base64
       const base64Content = btoa(fileContent);
       
-      // Call the Lambda function via API Gateway or local API route
-      // In development, use the local API route
-      // In production, use the API Gateway endpoint from environment variable
-      const isLocalDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-      const API_ENDPOINT = isLocalDevelopment 
-        ? '/api/process' 
-        : (process.env.NEXT_PUBLIC_API_ENDPOINT || '/api/process');
+      // Call the Lambda function via API Gateway
+      // For static S3 deployment, we always use the Lambda endpoint
+      const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT || 'https://your-api-gateway-url.execute-api.region.amazonaws.com/prod/process';
       
       console.log('Using API endpoint:', API_ENDPOINT);
       
@@ -149,7 +146,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           fileContent: base64Content,
-          vlanMappings
+          vlanMappings,
+          staticIpSupport
         }),
         mode: 'cors',
       });
@@ -208,6 +206,7 @@ export default function Home() {
     setVlanMappings({});
     setDetectedMappings({});
     setCsvData(null);
+    setStaticIpSupport(false);
     setStep('upload');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -275,6 +274,22 @@ export default function Home() {
               )}
               
               <p className="mb-6 text-black">Please provide segment names for each VLAN discovered in your file:</p>
+              
+              <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-md">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={staticIpSupport}
+                    onChange={(e) => setStaticIpSupport(e.target.checked)}
+                    className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-black font-medium">Static IP Support</span>
+                </label>
+                <p className="mt-2 text-sm text-gray-600">
+                  When enabled, includes Static IP, IP Address, and Passive IP columns in the output CSV. 
+                  Leave unchecked to exclude these columns (recommended for most use cases).
+                </p>
+              </div>
               
               <div className="space-y-4 mb-6">
                 {vlans.map(vlan => (
